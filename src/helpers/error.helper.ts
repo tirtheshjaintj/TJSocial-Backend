@@ -11,7 +11,8 @@ export class AppError extends Error {
 // Error handler at the end
 export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
     const status = err.status_code || 500;
-    console.error(status, err); // log the full error
+    console.log(err);
+    // console.error(status, err); // log the full error
     res.status(status).json({
         status: false,
         message: err.message || "Internal Server Error"

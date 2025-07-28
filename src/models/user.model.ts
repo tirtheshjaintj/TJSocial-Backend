@@ -13,8 +13,9 @@ export interface User extends Document {
     cover_pic?: string;
     dob: Date;
     verified: boolean;
-    otp: string;
+    otp?: string | null;
     google_id: string;
+    isPasswordCorrect: Function;
 }
 
 const userSchema = new Schema<User>(
@@ -23,15 +24,17 @@ const userSchema = new Schema<User>(
             type: String,
             required: true,
             validate: {
-                validator: (v: string) => /^[a-zA-Z\s]+$/.test(v),
-                message: "Not a valid name! Only letters and spaces are allowed.",
+                validator: (v: string) => /^[a-zA-Z0-9\s]+$/.test(v),
+                message: "Not a valid name! Only letters,spaces and numbers are allowed.",
             },
         },
         username: {
             type: String, required: true, unique: true,
             set: (value: string) => value.trim().toLowerCase(),
             validate: {
-                validator: (v: string) => /^\S+$/.test(v),
+                validator: (v: string) => {
+                    return /^\S+$/.test(v) && v.trim().length >= 3;
+                },
                 message: "Username cannot contain spaces or whitespace characters.",
             },
         },
@@ -126,9 +129,11 @@ userSchema.pre("save", async function (next) {
     next();
 });
 
+
 userSchema.methods.isPasswordCorrect = async function (password: string): Promise<boolean> {
     return await bcrypt.compare(password, this.password);
 };
+
 
 const UserModel: Model<User> = model<User>("User", userSchema);
 export default UserModel;

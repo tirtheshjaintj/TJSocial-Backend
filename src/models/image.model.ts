@@ -14,7 +14,6 @@ const imageSchema = new Schema<Image>({
     },
     post_id: {
         type: Schema.Types.ObjectId,
-        required: true,
         ref: "Post"
     },
     image_url: {

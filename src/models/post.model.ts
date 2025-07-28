@@ -4,7 +4,9 @@ export interface Post extends Document {
     description: string;
     user_id: Schema.Types.ObjectId;
     images: Schema.Types.ObjectId[];
+    hashtags: string[];
     type: "draft" | "posted";
+    post_type: "post" | "story";
 }
 
 const postSchema = new Schema<Post>(
@@ -19,26 +21,40 @@ const postSchema = new Schema<Post>(
             ref: "User",
             required: true,
         },
+        hashtags: {
+            type: [String],
+            required: true,
+            validate: {
+                validator: function (val: string[]) {
+                    return Array.isArray(val) && val.length > 0;
+                },
+                message: "At least one hashtag is required",
+            },
+        },
         images: {
             type: [Schema.Types.ObjectId],
             ref: "Image",
             required: true,
-            default: [],
+            validate: {
+                validator: function (val: Schema.Types.ObjectId[]) {
+                    return Array.isArray(val) && val.length > 0;
+                },
+                message: "At least one image is required",
+            },
         },
         type: {
             type: String,
             enum: ["draft", "posted"],
             default: "posted",
         },
+        post_type: {
+            type: String,
+            enum: ["post", "story"],
+            default: "post"
+        }
     },
     { timestamps: true }
 );
-
-// ✅ Use regular function so `this` is the query
-// postSchema.pre(/^find/, function (this: Query<any, any>, next) {
-//     this.populate('images');
-//     next();
-// });
 
 postSchema.index({ user_id: 1 });
 
