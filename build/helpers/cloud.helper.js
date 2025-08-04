@@ -38,7 +38,7 @@ const uploadToCloud = (fileBuffer) => {
             console.log(error);
             if (error)
                 return reject(error);
-            if (result === null || result === void 0 ? void 0 : result.secure_url) {
+            if (result?.secure_url) {
                 resolve(result.secure_url);
             }
             else {

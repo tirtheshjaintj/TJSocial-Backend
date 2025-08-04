@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createPost, deleteImage, deletePost, getAllPosts, getMyPosts, getPost, getUserPost } from "../controllers/post.controller";
+import { createPost, deleteImage, deletePost, getAllPosts, getMyPosts, getPost, getUserPost, updatePost } from "../controllers/post.controller";
 import { body, param, query } from "express-validator";
 import validate from "../middlewares/validate";
 import authcheck from "../middlewares/authcheck";
@@ -10,6 +10,7 @@ const postRouter = Router();
 postRouter.get("/"
     , query("page").isInt()
     , validate
+    ,authcheck
     , getAllPosts);
 
 postRouter.get("/mine"
@@ -36,17 +37,13 @@ postRouter.delete("/:post_id"
     , deletePost);
 
 postRouter.delete("/image/:image_id"
-    , param("post_id").isMongoId().withMessage("Not Valid MongoID")
+    , param("image_id").isMongoId().withMessage("Not Valid MongoID")
     , authcheck
     , deleteImage
 );
 
 postRouter.post("/", upload.array("images", 10)
-    , (req: any, res: any, next: any) => {
-        console.log("Data", req.body);
-        next();
-    }
-    , [
+    ,[
         body("type").isIn(["draft", "posted"]).withMessage("Can Only be posted or draft")
         , body("post_type").isIn(["post", "story"]).withMessage("Can Only be post or story")
         , body("hashtags")
@@ -95,6 +92,6 @@ postRouter.patch("/:post_id", upload.array("images", 10)
     ]
     , validate
     , authcheck
-    , createPost);
+    , updatePost);
 
 export default postRouter;

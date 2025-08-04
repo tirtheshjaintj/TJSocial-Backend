@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -28,32 +19,29 @@ const transporter = nodemailer_1.default.createTransport({
 /**
  * Sends an HTML email using nodemailer
  */
-function sendEmail(subject, receiver, html) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const mailOptions = {
-            from: `"TJ Social" <${process.env.GMAIL_USER}>`,
-            to: receiver,
-            subject: `TJ Social: ${subject}`,
-            html
-        };
-        try {
-            yield transporter.sendMail(mailOptions);
-            console.log("Mail sent to:", receiver);
-            return true;
-        }
-        catch (error) {
-            console.error("Error sending email:", error);
-            return false;
-        }
-    });
+async function sendEmail(subject, receiver, html) {
+    const mailOptions = {
+        from: `"TJ Social" <${process.env.GMAIL_USER}>`,
+        to: receiver,
+        subject: `TJ Social: ${subject}`,
+        html
+    };
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log("Mail sent to:", receiver);
+        return true;
+    }
+    catch (error) {
+        console.error("Error sending email:", error);
+        return false;
+    }
 }
 /**
  * Sends a formatted OTP email to the receiver
  */
-function sendOTP(receiver, otp) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const subject = "Your OTP Code";
-        const html = `
+async function sendOTP(receiver, otp) {
+    const subject = "Your OTP Code";
+    const html = `
     <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f9f9f9;">
       <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 8px; padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
         <h2 style="color: #333333; text-align: center;">🔐 Email Verification</h2>
@@ -75,6 +63,5 @@ function sendOTP(receiver, otp) {
       </div>
     </div>
   `;
-        return yield sendEmail(subject, receiver, html);
-    });
+    return await sendEmail(subject, receiver, html);
 }

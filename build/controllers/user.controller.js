@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -23,44 +14,47 @@ const cloud_helper_1 = __importDefault(require("../helpers/cloud.helper"));
 const google_auth_library_1 = require("google-auth-library");
 const follow_model_1 = __importDefault(require("../models/follow.model"));
 const client = new google_auth_library_1.OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-const fullUser = (user_1, ...args_1) => __awaiter(void 0, [user_1, ...args_1], void 0, function* (user, user_id = null) {
+const fullUser = async (user, user_id = null) => {
     let following = false;
     if (user_id) {
-        const followCheck = yield follow_model_1.default.findOne({ user_id, follow_id: user._id });
+        const followCheck = await follow_model_1.default.findOne({ user_id, follow_id: user._id });
         if (followCheck)
             following = true;
     }
     // Fetch followers and populate user info
-    const followers = yield follow_model_1.default.find({ follow_id: user._id })
+    const followers = await follow_model_1.default.find({ follow_id: user._id })
         .populate({
         path: "user_id",
         select: "name profile_pic username -_id"
     })
         .lean();
     // Fetch following and populate followed user info
-    const followings = yield follow_model_1.default.find({ user_id: user._id })
+    const followings = await follow_model_1.default.find({ user_id: user._id })
         .populate({
         path: "follow_id",
         select: "name profile_pic username _id"
     })
         .lean();
-    return Object.assign(Object.assign({}, user), { follower_count: followers.length, following_count: followings.length, following,
+    return {
+        ...user,
+        follower_count: followers.length,
+        following_count: followings.length,
+        following,
         followers,
-        followings });
-});
-function checkIfUnique(field, value, currentValue, label) {
-    return __awaiter(this, void 0, void 0, function* () {
-        if (value !== currentValue) {
-            const query = { [field]: value, verified: true };
-            const existing = yield user_model_1.default.findOne(query);
-            if (existing)
-                throw new error_helper_1.AppError(`Account already exists with this ${label}`, 401);
-        }
-    });
+        followings,
+    };
+};
+async function checkIfUnique(field, value, currentValue, label) {
+    if (value !== currentValue) {
+        const query = { [field]: value, verified: true };
+        const existing = await user_model_1.default.findOne(query);
+        if (existing)
+            throw new error_helper_1.AppError(`Account already exists with this ${label}`, 401);
+    }
 }
-exports.signup = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+exports.signup = (0, express_async_handler_1.default)(async (req, res) => {
     const { name, email, password, phone_number, username, dob } = req.body;
-    const exisitinguser = yield user_model_1.default.findOne({
+    const exisitinguser = await user_model_1.default.findOne({
         $or: [
             { email },
             { phone_number },
@@ -71,7 +65,7 @@ exports.signup = (0, express_async_handler_1.default)((req, res) => __awaiter(vo
     if (exisitinguser)
         throw new error_helper_1.AppError("Account Exists with Email or Phone Number", 401);
     const otp = crypto_1.default.randomInt(100000, 999999).toString(); // Generate OTP
-    yield user_model_1.default.deleteMany({
+    await user_model_1.default.deleteMany({
         $or: [
             { email },
             { phone_number },
@@ -84,52 +78,52 @@ exports.signup = (0, express_async_handler_1.default)((req, res) => __awaiter(vo
         .split(/\s+/) // split by one or more spaces
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(" ");
-    const user = yield user_model_1.default.create({ name: formatted, email, password, phone_number, username, dob: new Date(dob), otp });
-    const mailStatus = yield (0, mail_helper_1.sendOTP)(user.email, otp);
+    const user = await user_model_1.default.create({ name: formatted, email, password, phone_number, username, dob: new Date(dob), otp });
+    const mailStatus = await (0, mail_helper_1.sendOTP)(user.email, otp);
     if (!mailStatus)
         throw new Error('Failed to send OTP.');
     user.password = "";
     res.status(201).json({ status: true, message: 'Verification is Needed!', data: user._id });
-}));
-exports.getUser = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const userData = yield fullUser(req.user);
+});
+exports.getUser = (0, express_async_handler_1.default)(async (req, res) => {
+    const userData = await fullUser(req.user);
     console.log(userData);
     res.json({
         status: true,
         message: "User Fetched",
         data: userData
     });
-}));
-exports.getUserByUserName = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+});
+exports.getUserByUserName = (0, express_async_handler_1.default)(async (req, res) => {
     const { username } = req.params;
     console.log(username);
-    const user = yield user_model_1.default.findOne({ username, verified: true, account_type: "public" }).lean();
+    const user = await user_model_1.default.findOne({ username, verified: true, account_type: "public" }).lean();
     if (!user)
         throw new error_helper_1.AppError("User Not Found", 404);
     user.password = "";
     //@ts-ignore
-    const userData = yield fullUser(user, req.user._id);
+    const userData = await fullUser(user, req.user._id);
     console.log(userData);
     res.json({
         status: true,
         message: "User Fetched",
         data: userData
     });
-}));
-exports.login = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+});
+exports.login = (0, express_async_handler_1.default)(async (req, res) => {
     const { email, password } = req.body;
-    const user = yield user_model_1.default.findOne({
+    const user = await user_model_1.default.findOne({
         email,
         verified: true
     });
     console.log(user);
     if (!user)
         throw new error_helper_1.AppError("Wrong Credentials", 401);
-    const isMatch = yield (user === null || user === void 0 ? void 0 : user.isPasswordCorrect(password));
+    const isMatch = await user?.isPasswordCorrect(password);
     if (!isMatch)
         throw new error_helper_1.AppError("Wrong Credentials", 401);
     const token = (0, jwt_helper_1.setUser)(user);
-    const mailStatus = yield (0, mail_helper_1.sendEmail)(`Dear ${user === null || user === void 0 ? void 0 : user.name},You Logged In as User on new Device`, email, `<h1>Dear ${user === null || user === void 0 ? void 0 : user.name},\n\nYour account has been logged in on a new device.\n\nIf this wasn't you, please contact our support team immediately.</h1>`);
+    const mailStatus = await (0, mail_helper_1.sendEmail)(`Dear ${user?.name},You Logged In as User on new Device`, email, `<h1>Dear ${user?.name},\n\nYour account has been logged in on a new device.\n\nIf this wasn't you, please contact our support team immediately.</h1>`);
     if (!mailStatus)
         throw new Error("Email Not Sent");
     res.cookie('user_token', token, {
@@ -139,24 +133,23 @@ exports.login = (0, express_async_handler_1.default)((req, res) => __awaiter(voi
         maxAge: 1000 * 60 * 60 * 24 * 365
     });
     user.password = "";
-    const userData = yield fullUser(user.toObject());
+    const userData = await fullUser(user.toObject());
     console.log(userData);
     res.status(200).json({
         status: true, message: 'Account Login Successfully', data: userData
     });
-}));
-exports.updateUser = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c, _d;
+});
+exports.updateUser = (0, express_async_handler_1.default)(async (req, res) => {
     const { name, account_type, bio, username, dob } = req.body;
     const user_id = req.user._id;
-    const profile_pic = (_b = (_a = req.files) === null || _a === void 0 ? void 0 : _a['profile_pic']) === null || _b === void 0 ? void 0 : _b[0];
-    const cover_pic = (_d = (_c = req.files) === null || _c === void 0 ? void 0 : _c['cover_pic']) === null || _d === void 0 ? void 0 : _d[0];
+    const profile_pic = req.files?.['profile_pic']?.[0];
+    const cover_pic = req.files?.['cover_pic']?.[0];
     let profile_url, cover_url;
-    yield checkIfUnique('username', username, req.user.username, 'username');
+    await checkIfUnique('username', username, req.user.username, 'username');
     if (profile_pic)
-        profile_url = yield (0, cloud_helper_1.default)(profile_pic.buffer);
+        profile_url = await (0, cloud_helper_1.default)(profile_pic.buffer);
     if (cover_pic)
-        cover_url = yield (0, cloud_helper_1.default)(cover_pic.buffer);
+        cover_url = await (0, cloud_helper_1.default)(cover_pic.buffer);
     // 🧠 Build update object conditionally
     const updateData = {
         name,
@@ -169,41 +162,39 @@ exports.updateUser = (0, express_async_handler_1.default)((req, res) => __awaite
         updateData.profile_pic = profile_url;
     if (cover_url)
         updateData.cover_pic = cover_url;
-    const user = yield user_model_1.default.findOneAndUpdate({ _id: user_id, verified: true }, updateData, { new: true, runValidators: true });
+    const user = await user_model_1.default.findOneAndUpdate({ _id: user_id, verified: true }, updateData, { new: true, runValidators: true });
     if (!user)
         throw new error_helper_1.AppError("Not Authorized to Update");
-    const mailStatus = yield (0, mail_helper_1.sendEmail)(`Dear ${user === null || user === void 0 ? void 0 : user.name} Your Account is Updated`, user === null || user === void 0 ? void 0 : user.email, `<h1>Dear ${user === null || user === void 0 ? void 0 : user.name},\n\nYour account has been update.\n\nIf this wasn't you, please contact our support team immediately.</h1>`);
+    const mailStatus = await (0, mail_helper_1.sendEmail)(`Dear ${user?.name} Your Account is Updated`, user?.email, `<h1>Dear ${user?.name},\n\nYour account has been update.\n\nIf this wasn't you, please contact our support team immediately.</h1>`);
     if (!mailStatus)
         throw new Error("Email Not Sent");
     user.password = "";
-    const userData = yield fullUser(user.toObject());
+    const userData = await fullUser(user.toObject());
     res.status(200).json({
         status: true,
         message: 'User details updated successfully!',
         data: userData
     });
-}));
-function verifyGoogleToken(token) {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const ticket = yield client.verifyIdToken({
-                idToken: token,
-                audience: process.env.GOOGLE_CLIENT_ID,
-            });
-            const payload = ticket.getPayload(); // Safe, verified info
-            return payload; // Contains email, name, sub, etc.
-        }
-        catch (error) {
-            throw new error_helper_1.AppError("Not valid Google Login", 401);
-        }
-    });
+});
+async function verifyGoogleToken(token) {
+    try {
+        const ticket = await client.verifyIdToken({
+            idToken: token,
+            audience: process.env.GOOGLE_CLIENT_ID,
+        });
+        const payload = ticket.getPayload(); // Safe, verified info
+        return payload; // Contains email, name, sub, etc.
+    }
+    catch (error) {
+        throw new error_helper_1.AppError("Not valid Google Login", 401);
+    }
 }
-exports.google_login = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+exports.google_login = (0, express_async_handler_1.default)(async (req, res) => {
     const { token } = req.body;
-    const details = yield verifyGoogleToken(token);
+    const details = await verifyGoogleToken(token);
     const { email, name, sub: google_id } = details;
     const sanitized_name = name.replace(/[^a-zA-Z\s]/g, "").trim();
-    let user = yield user_model_1.default.findOne({ email: email, verified: true });
+    let user = await user_model_1.default.findOne({ email: email, verified: true });
     if (!user) {
         // Generate random details for signup
         const randomPassword = Math.random().toString(36).slice(-8);
@@ -217,7 +208,7 @@ exports.google_login = (0, express_async_handler_1.default)((req, res) => __awai
             String(today.getMonth() + 1).padStart(2, '0') +
             '-' +
             String(today.getDate()).padStart(2, '0');
-        user = yield user_model_1.default.create({
+        user = await user_model_1.default.create({
             name: sanitized_name,
             email,
             username,
@@ -227,18 +218,18 @@ exports.google_login = (0, express_async_handler_1.default)((req, res) => __awai
             password: randomPassword,
             verified: true
         });
-        yield (0, mail_helper_1.sendEmail)("You Logged In as User on new Device!", user.email, `Dear ${user.name},\n\nYour account has been successfully created via Google Login.\n\nLogin Details:\nEmail: ${email}\nTemporary Password: ${randomPassword}\n\nPlease change your password after login.`);
+        await (0, mail_helper_1.sendEmail)("You Logged In as User on new Device!", user.email, `Dear ${user.name},\n\nYour account has been successfully created via Google Login.\n\nLogin Details:\nEmail: ${email}\nTemporary Password: ${randomPassword}\n\nPlease change your password after login.`);
     }
     else {
         if (user.google_id && user.google_id !== google_id)
             throw new error_helper_1.AppError('Invalid Google ID', 401);
-        yield user_model_1.default.findByIdAndUpdate(user._id, {
+        await user_model_1.default.findByIdAndUpdate(user._id, {
             google_id,
             otp: null,
             verified: true
         });
     }
-    const mailStatus = yield (0, mail_helper_1.sendEmail)(`Dear ${user === null || user === void 0 ? void 0 : user.name} You Logged In as User on new Device`, email, `Dear ${user.name},\n\nYour account has been logged in on a new device.\n\nIf this wasn't you, please contact our support team immediately.`);
+    const mailStatus = await (0, mail_helper_1.sendEmail)(`Dear ${user?.name} You Logged In as User on new Device`, email, `Dear ${user.name},\n\nYour account has been logged in on a new device.\n\nIf this wasn't you, please contact our support team immediately.`);
     if (!mailStatus)
         throw new Error("Email Not Sent");
     const auth_token = (0, jwt_helper_1.setUser)(user);
@@ -249,20 +240,20 @@ exports.google_login = (0, express_async_handler_1.default)((req, res) => __awai
         maxAge: 1000 * 60 * 60 * 24 * 365, // 1 day
     });
     user.password = "";
-    const userData = yield fullUser(user.toObject());
+    const userData = await fullUser(user.toObject());
     res.status(200).json({ status: true, message: 'Google Login successful!', data: userData });
-}));
-exports.verifyOTP = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+});
+exports.verifyOTP = (0, express_async_handler_1.default)(async (req, res) => {
     const { otp } = req.body;
     const { user_id } = req.params;
-    const user = yield user_model_1.default.findOne({ _id: user_id, otp, verified: false });
+    const user = await user_model_1.default.findOne({ _id: user_id, otp, verified: false });
     if (!user)
         throw new error_helper_1.AppError("Invalid OTP Try Again", 401);
-    yield user_model_1.default.findByIdAndUpdate(user._id, {
+    await user_model_1.default.findByIdAndUpdate(user._id, {
         verified: true,
         otp: null
     });
-    const mailStatus = yield (0, mail_helper_1.sendEmail)(`${user.name} Account Verified`, user.email, `<h1>Account Verified</h1>`);
+    const mailStatus = await (0, mail_helper_1.sendEmail)(`${user.name} Account Verified`, user.email, `<h1>Account Verified</h1>`);
     if (!mailStatus)
         throw new Error("Email Not Sent");
     const token = (0, jwt_helper_1.setUser)(user);
@@ -273,64 +264,64 @@ exports.verifyOTP = (0, express_async_handler_1.default)((req, res) => __awaiter
         maxAge: 1000 * 60 * 60 * 24 * 365, // 1 day
     });
     user.password = "";
-    const userData = yield fullUser(user.toObject());
+    const userData = await fullUser(user.toObject());
     res.status(200).json({
         status: true, message: 'Account Created Successfully', data: userData
     });
-}));
-exports.forgotPassword = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+});
+exports.forgotPassword = (0, express_async_handler_1.default)(async (req, res) => {
     const { email } = req.body;
-    const user = yield user_model_1.default.findOne({ email, verified: true });
+    const user = await user_model_1.default.findOne({ email, verified: true });
     if (!user)
         throw new error_helper_1.AppError("Invalid Account", 401);
     const otp = crypto_1.default.randomInt(100000, 999999).toString(); // Generate OTP
-    yield user_model_1.default.findByIdAndUpdate(user._id, {
+    await user_model_1.default.findByIdAndUpdate(user._id, {
         otp
     }, { new: true });
-    const mailStatus = yield (0, mail_helper_1.sendOTP)(user.email, otp);
+    const mailStatus = await (0, mail_helper_1.sendOTP)(user.email, otp);
     if (!mailStatus)
         throw new Error('Failed to send OTP.');
     res.status(200).json({ status: true, message: "OTP Sent Scuccessfully", data: user._id });
-}));
-exports.changePassword = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+});
+exports.changePassword = (0, express_async_handler_1.default)(async (req, res) => {
     const { email, otp, password } = req.body;
-    const user = yield user_model_1.default.findOne({ email, otp, verified: true });
+    const user = await user_model_1.default.findOne({ email, otp, verified: true });
     console.log(email, otp, password);
     if (!user)
         throw new error_helper_1.AppError("Invalid OTP", 401);
     user.otp = null;
     user.password = password;
-    yield user.save();
-    const mailStatus = yield (0, mail_helper_1.sendEmail)(`${user.name} Password Changed Successfully ✅`, user.email, `<h1>${user.name} Password Changed Successfully ✅</h1>`);
+    await user.save();
+    const mailStatus = await (0, mail_helper_1.sendEmail)(`${user.name} Password Changed Successfully ✅`, user.email, `<h1>${user.name} Password Changed Successfully ✅</h1>`);
     if (!mailStatus)
         throw new Error("Email Not Sent");
     res.status(200).json({ status: true, message: "Password updated successfully" });
-}));
-exports.resendOTP = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+});
+exports.resendOTP = (0, express_async_handler_1.default)(async (req, res) => {
     const { user_id } = req.params;
-    const user = yield user_model_1.default.findOne({ _id: user_id, verified: false });
+    const user = await user_model_1.default.findOne({ _id: user_id, verified: false });
     if (!user)
         throw new error_helper_1.AppError("Invalid Account", 401);
     const otp = crypto_1.default.randomInt(100000, 999999).toString(); // Generate OTP
-    yield user_model_1.default.findByIdAndUpdate(user._id, {
+    await user_model_1.default.findByIdAndUpdate(user._id, {
         otp
     });
-    const mailStatus = yield (0, mail_helper_1.sendOTP)(user.email, otp);
+    const mailStatus = await (0, mail_helper_1.sendOTP)(user.email, otp);
     if (!mailStatus)
         throw new Error('Failed to send OTP.');
     res.status(200).json({ status: true, message: "OTP Resent Scuccessfully" });
-}));
-exports.checkUsername = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+});
+exports.checkUsername = (0, express_async_handler_1.default)(async (req, res) => {
     const { username } = req.body;
     const currentuser = req.user;
-    const user = yield user_model_1.default.findOne({ username, verified: true });
+    const user = await user_model_1.default.findOne({ username, verified: true });
     if (currentuser && currentuser.username == username)
         res.status(200).json({ status: false, message: "Username Available" });
     if (user)
         res.status(401).json({ status: false, message: "Username Already Taken" });
     res.status(200).json({ status: true, message: "Username Available", data: username });
-}));
-exports.logOut = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+});
+exports.logOut = (0, express_async_handler_1.default)(async (req, res) => {
     res.clearCookie('user_token', {
         httpOnly: true,
         secure: true,
@@ -338,4 +329,4 @@ exports.logOut = (0, express_async_handler_1.default)((req, res) => __awaiter(vo
         path: '/',
     });
     res.status(200).json({ status: true, message: "User logged out" });
-}));
+});
