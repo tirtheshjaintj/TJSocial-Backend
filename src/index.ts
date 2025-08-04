@@ -32,6 +32,10 @@ app.use(cookieParser());
 //All Routes
 app.use("/api", homeRouter);
 
+app.get("/",(req,res)=>{
+     res.send("Hello World");
+});
+
 //Error Handling Using Express-AsyncHandler
 app.use(errorHandler);
 
