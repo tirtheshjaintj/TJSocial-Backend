@@ -10,6 +10,43 @@ import { OAuth2Client } from "google-auth-library";
 import FollowModel from "../models/follow.model";
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+
+const fullUser = async (user: any, user_id: any = null) => {
+
+    let following = false;
+    if (user_id) {
+        const followCheck = await FollowModel.findOne({ user_id, follow_id: user._id });
+        if (followCheck) following = true;
+    }
+
+    // Fetch followers and populate user info
+    const followers = await FollowModel.find({ follow_id: user._id })
+        .populate({
+            path: "user_id",
+            select: "name profile_pic username -_id"
+        })
+        .lean();
+
+    // Fetch following and populate followed user info
+    const followings = await FollowModel.find({ user_id: user._id })
+        .populate({
+            path: "follow_id",
+            select: "name profile_pic username _id"
+        })
+        .lean();
+
+
+    return {
+        ...user,
+        follower_count: followers.length,
+        following_count: followings.length,
+        following,
+        followers,
+        followings,
+    };
+};
+
+
 async function checkIfUnique(field: string, value: string, currentValue: string, label: string) {
     if (value !== currentValue) {
         const query: any = { [field]: value, verified: true };
@@ -57,20 +94,24 @@ export const signup = expressAsyncHandler(async (req: Request, res: Response) =>
 });
 
 export const getUser = expressAsyncHandler(async (req: any, res: Response) => {
-    const user_id = req.user._id;
+    const userData = await fullUser(req.user);
+    console.log(userData);
+    res.json({
+        status: true,
+        message: "User Fetched",
+        data: userData
+    });
+});
 
-    // Run both counts in parallel
-    const [follower_count, following_count] = await Promise.all([
-        FollowModel.countDocuments({ follow_id: user_id }),
-        FollowModel.countDocuments({ user_id: user_id })
-    ]);
-
-    const userData = {
-        ...req.user,
-        follower_count,
-        following_count
-    };
-
+export const getUserByUserName = expressAsyncHandler(async (req: Request, res: Response) => {
+    const { username } = req.params;
+    console.log(username);
+    const user = await UserModel.findOne({ username, verified: true, account_type: "public" }).lean();
+    if (!user) throw new AppError("User Not Found", 404);
+    user.password = "";
+    //@ts-ignore
+    const userData = await fullUser(user, req.user._id);
+    console.log(userData);
     res.json({
         status: true,
         message: "User Fetched",
@@ -102,8 +143,10 @@ export const login = expressAsyncHandler(async (req: Request, res: Response) => 
         maxAge: 1000 * 60 * 60 * 24 * 365
     });
     user.password = "";
+    const userData = await fullUser(user.toObject());
+    console.log(userData);
     res.status(200).json({
-        status: true, message: 'Account Login Successfully', data: user
+        status: true, message: 'Account Login Successfully', data: userData
     });
 });
 
@@ -146,15 +189,13 @@ export const updateUser = expressAsyncHandler(async (req: any, res: Response) =>
         `<h1>Dear ${user?.name},\n\nYour account has been update.\n\nIf this wasn't you, please contact our support team immediately.</h1>`
     );
     if (!mailStatus) throw new Error("Email Not Sent");
-    const [follower_count, following_count] = await Promise.all([
-        FollowModel.countDocuments({ follow_id: user_id }),
-        FollowModel.countDocuments({ user_id: user_id })
-    ]);
+
     user.password = "";
+    const userData = await fullUser(user.toObject());
     res.status(200).json({
         status: true,
         message: 'User details updated successfully!',
-        data: { ...user.toObject(), follower_count, following_count }
+        data: userData
     });
 });
 
@@ -231,7 +272,8 @@ export const google_login = expressAsyncHandler(async (req: Request, res: Respon
         maxAge: 1000 * 60 * 60 * 24 * 365, // 1 day
     });
     user.password = "";
-    res.status(200).json({ status: true, message: 'Google Login successful!', data: user });
+    const userData = await fullUser(user.toObject());
+    res.status(200).json({ status: true, message: 'Google Login successful!', data: userData });
 });
 
 export const verifyOTP = expressAsyncHandler(async (req: Request, res: Response) => {
@@ -252,8 +294,11 @@ export const verifyOTP = expressAsyncHandler(async (req: Request, res: Response)
         sameSite: 'none',
         maxAge: 1000 * 60 * 60 * 24 * 365, // 1 day
     });
+    user.password = "";
+    const userData = await fullUser(user.toObject());
+
     res.status(200).json({
-        status: true, message: 'Account Created Successfully', data: user
+        status: true, message: 'Account Created Successfully', data: userData
     });
 });
 
@@ -303,4 +348,14 @@ export const checkUsername = expressAsyncHandler(async (req: any, res: Response)
     if (currentuser && currentuser.username == username) res.status(200).json({ status: false, message: "Username Available" });
     if (user) res.status(401).json({ status: false, message: "Username Already Taken" });
     res.status(200).json({ status: true, message: "Username Available", data: username });
+});
+
+export const logOut = expressAsyncHandler(async (req: Request, res: Response) => {
+    res.clearCookie('user_token', {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        path: '/',
+    });
+    res.status(200).json({ status: true, message: "User logged out" });
 });

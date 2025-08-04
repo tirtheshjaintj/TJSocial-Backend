@@ -26,6 +26,7 @@ postRouter.get("/:post_id"
 postRouter.get("/user/:user_id"
     , param("user_id").isMongoId().withMessage("Not Valid MongoID")
     , validate
+    , authcheck
     , getUserPost);
 
 postRouter.delete("/:post_id"

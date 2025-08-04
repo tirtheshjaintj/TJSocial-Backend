@@ -1,4 +1,4 @@
-import { changePassword, checkUsername, forgotPassword, google_login, resendOTP, verifyOTP } from './../controllers/user.controller';
+import { changePassword, checkUsername, forgotPassword, getUserByUserName, google_login, logOut, resendOTP, verifyOTP } from './../controllers/user.controller';
 import { Router } from "express";
 import { body, param } from "express-validator";
 import authcheck from "../middlewares/authcheck";
@@ -9,6 +9,11 @@ import upload from "../middlewares/multer";
 const userRouter = Router();
 
 userRouter.get("/", authcheck, getUser);
+
+userRouter.get("/user/:username",
+    param('username').matches(/^\S+$/).withMessage('Username must not have spaces').isLength({ min: 3 }).withMessage('Username must be atleast length 3'),
+    validate, authcheck, getUserByUserName);
+
 userRouter.post("/signup", [
     body('name').matches(/^[a-zA-Z\s]+$/).withMessage('Name must contain only letters and spaces.').isLength({ min: 3 }).withMessage('Name must contain only letters and spaces.'),
     body('email').isEmail().withMessage('Please enter a valid email address.'),
@@ -88,14 +93,6 @@ userRouter.post("/username"
     , validate
     , checkUsername);
 
-userRouter.post('/logout', (req, res) => {
-    res.clearCookie('user_token', {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        path: '/',
-    });
-    res.status(200).json({ status: true, message: "User logged out" });
-});
+userRouter.post('/logout', logOut);
 
 export default userRouter;

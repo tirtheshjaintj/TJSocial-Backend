@@ -1,3 +1,4 @@
+import { bookmarkPost } from './bookmark.controller';
 import { Request, Response } from "express";
 import uploadToCloud from "../helpers/cloud.helper";
 import postModel from "../models/post.model";
@@ -7,6 +8,7 @@ import CommentModel from "../models/comment.model";
 import likeModel from "../models/like.model";
 import UserModel from "../models/user.model";
 import imageModel from "../models/image.model";
+import BookmarkModel from '../models/bookmark.model';
 
 export const getAllPosts = expressAsyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
@@ -129,7 +131,7 @@ export const getMyPosts = expressAsyncHandler(async (req: any, res: Response) =>
     const postIds = posts.map(post => post._id);
 
     // Step 2: Fetch like & comment counts
-    const [likeCounts, commentCounts, likedPosts] = await Promise.all([
+    const [likeCounts, commentCounts, likedPosts, bookmarkedPosts] = await Promise.all([
         likeModel.aggregate([
             { $match: { post_id: { $in: postIds } } },
             { $group: { _id: "$post_id", count: { $sum: 1 } } }
@@ -138,20 +140,23 @@ export const getMyPosts = expressAsyncHandler(async (req: any, res: Response) =>
             { $match: { post_id: { $in: postIds } } },
             { $group: { _id: "$post_id", count: { $sum: 1 } } }
         ]),
-        likeModel.find({ user_id, post_id: { $in: postIds } }).select("post_id").lean()
+        likeModel.find({ user_id, post_id: { $in: postIds } }).select("post_id").lean(),
+        BookmarkModel.find({ user_id, post_id: { $in: postIds } }).select("post_id").lean()
     ]);
 
     // Step 3: Create maps for counts and liked IDs
     const likeMap = new Map(likeCounts.map(i => [i._id.toString(), i.count]));
     const commentMap = new Map(commentCounts.map(i => [i._id.toString(), i.count]));
     const likedPostIdSet = new Set(likedPosts.map(like => like.post_id.toString()));
+    const bookmarkedPostIdSet = new Set(bookmarkedPosts.map(bookmark => bookmark.post_id.toString()));
 
     // Step 4: Enrich posts with counts and liked status
     const enrichedPosts = posts.map(post => ({
         ...post,
         like_count: likeMap.get(post._id.toString()) || 0,
         comment_count: commentMap.get(post._id.toString()) || 0,
-        liked: likedPostIdSet.has(post._id.toString())
+        liked: likedPostIdSet.has(post._id.toString()),
+        bookmarked: bookmarkedPostIdSet.has(post._id.toString())
     }));
 
     res.json({
@@ -165,13 +170,26 @@ export const getMyPosts = expressAsyncHandler(async (req: any, res: Response) =>
 export const getUserPost = expressAsyncHandler(async (req: any, res: Response) => {
     const { user_id } = req.params;
     const user = await UserModel.find({ _id: user_id, account_type: "public", verified: true });
+    const viewer_id = req.user._id;
     if (!user) throw new AppError("No Posts for User Found", 404);
-    const posts = await postModel.find({ user_id }).sort({ createdAt: -1 }).populate([
-        { path: "images", select: "image_url -_id" },
-        { path: "user_id", select: "name username _id account_type profile_pic" }
-    ]).lean();
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = 6;
+    const skip = (page - 1) * limit;
+    // Step 1: Fetch paginated posts
+    const posts = await postModel.find({ user_id, type: "posted" })
+        .sort({ createdAt: -1 })
+        .populate([
+            { path: "images", select: "image_url -_id" },
+            { path: "user_id", select: "name username _id account_type profile_pic" }
+        ])
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
     const postIds = posts.map(post => post._id);
-    const [likeCounts, commentCounts] = await Promise.all([
+
+    // Step 2: Fetch like & comment counts
+    const [likeCounts, commentCounts, likedPosts, bookmarkedPosts] = await Promise.all([
         likeModel.aggregate([
             { $match: { post_id: { $in: postIds } } },
             { $group: { _id: "$post_id", count: { $sum: 1 } } }
@@ -179,17 +197,26 @@ export const getUserPost = expressAsyncHandler(async (req: any, res: Response) =
         CommentModel.aggregate([
             { $match: { post_id: { $in: postIds } } },
             { $group: { _id: "$post_id", count: { $sum: 1 } } }
-        ])
+        ]),
+        likeModel.find({ user_id: viewer_id, post_id: { $in: postIds } }).select("post_id").lean(),
+        BookmarkModel.find({ user_id: viewer_id, post_id: { $in: postIds } }).select("post_id").lean()
     ]);
+
+    // Step 3: Create maps for counts and liked IDs
     const likeMap = new Map(likeCounts.map(i => [i._id.toString(), i.count]));
     const commentMap = new Map(commentCounts.map(i => [i._id.toString(), i.count]));
+    const likedPostIdSet = new Set(likedPosts.map(like => like.post_id.toString()));
+    const bookmarkedPostIdSet = new Set(bookmarkedPosts.map(bookmark => bookmark.post_id.toString()));
 
+    // Step 4: Enrich posts with counts and liked status
     const enrichedPosts = posts.map(post => ({
         ...post,
         like_count: likeMap.get(post._id.toString()) || 0,
-        comment_count: commentMap.get(post._id.toString()) || 0
+        comment_count: commentMap.get(post._id.toString()) || 0,
+        liked: likedPostIdSet.has(post._id.toString()),
+        bookmarked: bookmarkedPostIdSet.has(post._id.toString())
     }));
-
+    console.log(enrichedPosts);
     res.json({
         status: true,
         message: "Posts fetched successfully",
